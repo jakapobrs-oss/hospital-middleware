@@ -263,7 +263,7 @@ GET /patient/search?first_name=somchai&date_of_birth=1985-04-12
 
 | Field | Matching |
 |---|---|
-| `national_id` | exact; 13 digits, dashes and spaces ignored (`1-1000-00000-01-6`) |
+| `national_id` | exact; 13 digits, optionally separated by dashes or spaces (`1-1000-00000-01-6`); any other character is a `400` |
 | `passport_id` | exact, case-insensitive |
 | `first_name` | case-insensitive partial match on `first_name_th` **or** `first_name_en` |
 | `middle_name` | same, on the middle names |
@@ -276,9 +276,15 @@ GET /patient/search?first_name=somchai&date_of_birth=1985-04-12
 
 All filters are optional and combined with AND. With no filter, the endpoint returns every patient of the
 staff member's hospital, one page at a time. The hospital always comes from the access token — a request
-cannot ask for another hospital's patients. Any field or parameter not listed above is rejected with
-`400 validation_error`, as are a second JSON object in the body and a query string that is not correctly
-URL-encoded (`first_name=%ZZ`): a filter that was silently dropped would return far more patient records than intended.
+cannot ask for another hospital's patients. A filter that was silently dropped would return far more patient
+records than intended, so these are rejected with `400 validation_error` instead of being ignored:
+
+- a field or parameter not listed above, or a query parameter given twice (`first_name=&first_name=John`);
+- a second JSON object in the body, or a query string that is not correctly URL-encoded (`first_name=%ZZ`);
+- text that is not valid UTF-8 (`first_name=%FF`) or contains a NUL character.
+
+Each source must be valid on its own; when the query and the body set the same field, the body's value is used.
+A JSON `null` means "not provided", the same as leaving the field out (responses use `null` the same way).
 
 `200 OK`
 
@@ -316,7 +322,7 @@ passport ID, and the response is that one patient object (the fields above), loo
 hospital with the same HIS refresh as the search. A 13-digit number that matches no national ID is tried again as a
 passport number, since some passports are 13 digits too.
 
-Errors: `400 validation_error` (empty or over 20 characters), `401 unauthorized`, `404 not_found`, `429 rate_limited`,
+Errors: `400 validation_error` (empty, over 20 characters, or not valid UTF-8 text), `401 unauthorized`, `404 not_found`, `429 rate_limited`,
 `500 internal_error`.
 
 ### `GET /health`
@@ -353,14 +359,18 @@ runs `mock-his`, which implements this contract with synthetic patients.
 - **Rate limiting (Nginx):** `/staff/*` per client IP (30/min, burst 40) against password guessing; `/patient/*` per
   access token (120/min, burst 60) against enumerating identity numbers and flooding the HIS. The bucket key is the
   token itself, so `Bearer x`, `bearer x` and `Bearer   x` share one bucket.
-- **Input:** unknown or malformed filters are rejected instead of ignored; NUL characters are rejected on every
-  endpoint (PostgreSQL text cannot store them); bodies are capped at 1 MB (`413`, also as JSON from Nginx); every SQL
+- **Bearer tokens** must follow the RFC 6750 syntax, separated from `Bearer` by ordinary spaces only; anything else
+  (for example a no-break space, or two tokens in one header) is a `401` before verification, so header spellings
+  cannot be rotated to obtain fresh rate-limit buckets.
+- **Input:** unknown or malformed filters are rejected instead of ignored; text that is not valid UTF-8 or contains
+  NUL is rejected on every endpoint (PostgreSQL text cannot store it); bodies are capped at 1 MB (`413`, also as JSON
+  from Nginx); `/staff/*` ignores JSON fields it does not know, and a repeated JSON field takes its last value; every SQL
   value is a bind parameter, and LIKE wildcards in names are escaped. The database work of every request has a
 5-second deadline (start-up seeding: 30 seconds), so a locked table cannot pile up requests.
 - **Personal data in logs:** application logs never contain passwords, tokens, national IDs or passport numbers —
   request and panic logs record the route template (`/patient/search/:id`) rather than the URL, and HIS errors are
   stripped of the URL (which contains the identity number). Nginx logs the path without the query string, writes
-  `/patient/search/{id}` for the lookup route, and keeps its error log at `crit`.
+  every path under `/patient/search/` as `/patient/search/{id}`, and keeps its error log at `crit`.
 - **Responses** carrying patient data or tokens are sent with `Cache-Control: no-store`.
 - **Dependencies:** `make vuln` runs `govulncheck`; it reports no known vulnerabilities.
 - **Production follow-ups (out of scope):** an audit log of who searched for which patient (PDPA), TLS termination at

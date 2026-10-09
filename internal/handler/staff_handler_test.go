@@ -542,6 +542,10 @@ func TestStaffHandler_RejectsNULCharacters(t *testing.T) {
 			body: `{"username":"nurse\u0000","password":"S3cure-Passw0rd","hospital":"hospital-a"}`, expectedField: "username"},
 		{name: "login: hospital", path: "/staff/login",
 			body: `{"username":"nurse01","password":"S3cure-Passw0rd","hospital":"\u0000"}`, expectedField: "hospital"},
+		{name: "create: password", path: "/staff/create",
+			body: `{"username":"nurse01","password":"1234567\u0000","hospital":"hospital-a"}`, expectedField: "password"},
+		{name: "login: password", path: "/staff/login",
+			body: `{"username":"nurse01","password":"S3cure\u0000","hospital":"hospital-a"}`, expectedField: "password"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {

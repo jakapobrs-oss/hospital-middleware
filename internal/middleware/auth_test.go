@@ -146,3 +146,24 @@ func TestStaffIdentityFrom_withoutRequireAuth(t *testing.T) {
 
 	assert.False(t, identityWasSet, "an unprotected route has no staff identity")
 }
+
+// Nginx rate-limits patient searches per token text. Any header the API would otherwise accept under a
+// different spelling must be rejected, or a client could rotate spellings to get fresh rate-limit buckets.
+func TestRequireAuth_RejectsTokensOutsideTheBearerSyntax(t *testing.T) {
+	noBreakSpace := string(rune(0xA0))
+	for name, authorizationHeader := range map[string]string{
+		"no-break space before the token": "Bearer " + noBreakSpace + "the-token",
+		"no-break space after the token":  "Bearer the-token" + noBreakSpace,
+		"character outside RFC 6750":      "Bearer the-token!",
+		"two tokens in one header":        "Bearer the-token, Bearer other-token",
+	} {
+		t.Run(name, func(t *testing.T) {
+			verifier := &fakeTokenVerifier{}
+			result := callProtectedRoute(verifier, authorizationHeader)
+
+			assert.Equal(t, http.StatusUnauthorized, result.response.Code)
+			assert.Empty(t, verifier.receivedTokens, "a malformed header must not even reach token verification")
+			assert.False(t, result.handlerCalled)
+		})
+	}
+}

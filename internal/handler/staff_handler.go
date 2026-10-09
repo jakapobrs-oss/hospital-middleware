@@ -69,14 +69,15 @@ func (req createStaffRequest) formatErrors() []apierror.FieldError {
 			Message: fmt.Sprintf("must be at most %d bytes", auth.MaxPasswordBytes),
 		})
 	}
-	return append(fieldErrors, nulCharacterErrors(map[string]string{"hospital": req.Hospital})...)
+	return append(fieldErrors, nulCharacterErrors(map[string]string{"hospital": req.Hospital, "password": req.Password})...)
 }
 
 // nulCharacterErrors reports fields containing U+0000. PostgreSQL text cannot hold it, so such a value
-// would otherwise reach the database and fail there as a 500 instead of a 400.
+// would otherwise reach the database and fail there as a 500 instead of a 400. Passwords are only ever
+// hashed, but they follow the same rule so every endpoint treats NUL the same way.
 func nulCharacterErrors(valuesByField map[string]string) []apierror.FieldError {
 	var fieldErrors []apierror.FieldError
-	for _, field := range []string{"username", "hospital"} {
+	for _, field := range []string{"username", "password", "hospital"} {
 		if value, present := valuesByField[field]; present && strings.ContainsRune(value, 0) {
 			fieldErrors = append(fieldErrors, apierror.FieldError{Field: field, Message: "must not contain NUL characters"})
 		}
@@ -164,7 +165,7 @@ func (h *StaffHandler) Login(c *gin.Context) {
 		apierror.RespondValidation(c, err)
 		return
 	}
-	if fieldErrors := nulCharacterErrors(map[string]string{"username": req.Username, "hospital": req.Hospital}); len(fieldErrors) > 0 {
+	if fieldErrors := nulCharacterErrors(map[string]string{"username": req.Username, "password": req.Password, "hospital": req.Hospital}); len(fieldErrors) > 0 {
 		apierror.RespondFields(c, fieldErrors...)
 		return
 	}

@@ -256,6 +256,9 @@ func TestPatientHandler_Search_RejectsInputThatWouldBeIgnored(t *testing.T) {
 	}{
 		{name: "unknown query parameter", method: http.MethodGet, target: "/patient/search?name=som", expectedField: "name"},
 		{name: "query that is not URL-encoded correctly", method: http.MethodGet, target: "/patient/search?first_name=%ZZ"},
+		{name: "query value that is not valid UTF-8", method: http.MethodGet, target: "/patient/search?first_name=%FF", expectedField: "first_name"},
+		{name: "same query parameter twice", method: http.MethodGet, target: "/patient/search?first_name=&first_name=John", expectedField: "first_name"},
+		{name: "national ID with a stray letter", method: http.MethodPost, target: "/patient/search", body: `{"national_id":"x1100000000016"}`, expectedField: "national_id"},
 		{name: "unknown JSON field", method: http.MethodPost, target: "/patient/search", body: `{"firstName":"som"}`, expectedField: "firstName"},
 		{name: "second JSON object after the first", method: http.MethodPost, target: "/patient/search", body: `{}{"national_id":"1100000000032"}`},
 		{name: "NUL character", method: http.MethodPost, target: "/patient/search", body: `{"first_name":"\u0000"}`, expectedField: "first_name"},
@@ -346,6 +349,8 @@ func TestPatientHandler_FindByIdentityNumber_Errors(t *testing.T) {
 		{name: "not found", staff: &nurseOfHospitalA, target: "/patient/search/1100000000099",
 			serviceErr: domain.ErrPatientNotFound, expectedStatus: http.StatusNotFound, expectedCode: apierror.CodeNotFound},
 		{name: "identifier too long", staff: &nurseOfHospitalA, target: "/patient/search/" + string(bytes.Repeat([]byte("9"), 21)),
+			expectedStatus: http.StatusBadRequest, expectedCode: apierror.CodeValidation},
+		{name: "identifier that is not valid UTF-8", staff: &nurseOfHospitalA, target: "/patient/search/%FF",
 			expectedStatus: http.StatusBadRequest, expectedCode: apierror.CodeValidation},
 		{name: "service failure is hidden", staff: &nurseOfHospitalA, target: "/patient/search/1100000000016",
 			serviceErr: errors.New("connection refused"), expectedStatus: http.StatusInternalServerError, expectedCode: apierror.CodeInternal},

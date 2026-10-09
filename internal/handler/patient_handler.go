@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -132,7 +133,7 @@ func (handler *PatientHandler) FindByIdentityNumber(c *gin.Context) {
 	}
 
 	identityNumber := strings.TrimSpace(c.Param("id"))
-	if identityNumber == "" || len(identityNumber) > maxIdentityNumberLength || strings.ContainsRune(identityNumber, 0) {
+	if identityNumber == "" || len(identityNumber) > maxIdentityNumberLength || !isStorableText(identityNumber) {
 		apierror.RespondFields(c, apierror.FieldError{Field: "id", Message: "must be a national ID or passport ID"})
 		return
 	}
@@ -158,9 +159,14 @@ func bindSearchRequest(c *gin.Context) (request searchPatientsRequest, ok bool) 
 		apierror.Respond(c, http.StatusBadRequest, apierror.CodeValidation, "query string is not correctly URL-encoded")
 		return request, false
 	}
-	for key := range query {
+	for key, values := range query {
 		if !searchFieldNames[key] {
 			apierror.RespondFields(c, apierror.FieldError{Field: key, Message: unknownFieldMessage})
+			return request, false
+		}
+		// "first_name=&first_name=John" must not silently keep the empty value and drop the filter.
+		if len(values) > 1 {
+			apierror.RespondFields(c, apierror.FieldError{Field: key, Message: "must be given only once"})
 			return request, false
 		}
 	}
@@ -217,6 +223,13 @@ func decodeJSONBody(c *gin.Context, request *searchPatientsRequest) bool {
 	return false
 }
 
+// isStorableText reports whether a value can be sent to PostgreSQL as text: it must be valid UTF-8 and
+// free of U+0000. JSON bodies are always valid UTF-8 after decoding, but query strings and paths are
+// percent-decoded byte by byte, so "%FF" would otherwise reach the database and fail there as a 500.
+func isStorableText(value string) bool {
+	return utf8.ValidString(value) && !strings.ContainsRune(value, 0)
+}
+
 // describeJSONType tells the client which JSON type a field expects.
 func describeJSONType(expectedType reflect.Type) string {
 	for expectedType.Kind() == reflect.Pointer {
@@ -237,9 +250,8 @@ func (request searchPatientsRequest) toCriteria() (domain.PatientSearchCriteria,
 		{"phone_number", request.PhoneNumber}, {"email", request.Email},
 	}
 	for _, field := range textFields {
-		// PostgreSQL text cannot hold U+0000; without this check the query fails with a 500.
-		if strings.ContainsRune(field.value, 0) {
-			fieldErrors = append(fieldErrors, apierror.FieldError{Field: field.name, Message: "must not contain NUL characters"})
+		if !isStorableText(field.value) {
+			fieldErrors = append(fieldErrors, apierror.FieldError{Field: field.name, Message: "must be valid UTF-8 text without NUL characters"})
 		}
 	}
 
@@ -252,8 +264,9 @@ func (request searchPatientsRequest) toCriteria() (domain.PatientSearchCriteria,
 		PhoneNumber: strings.TrimSpace(request.PhoneNumber),
 		Email:       strings.TrimSpace(request.Email),
 	}
-	if strings.TrimSpace(request.NationalID) != "" && len(criteria.NationalID) != domain.NationalIDLength {
-		fieldErrors = append(fieldErrors, apierror.FieldError{Field: "national_id", Message: "must contain 13 digits"})
+	// Only digits, dashes and spaces are accepted: "x1100000000016" is a typo, not a national ID.
+	if rawNationalID := strings.TrimSpace(request.NationalID); rawNationalID != "" && !domain.LooksLikeNationalID(rawNationalID) {
+		fieldErrors = append(fieldErrors, apierror.FieldError{Field: "national_id", Message: "must contain 13 digits (dashes and spaces allowed)"})
 	}
 	if criteria.PhoneNumber != "" && !strings.ContainsAny(criteria.PhoneNumber, "0123456789") {
 		fieldErrors = append(fieldErrors, apierror.FieldError{Field: "phone_number", Message: "must contain digits"})
