@@ -1,0 +1,3 @@
+# Check out every text file with LF endings on every OS. CRLF breaks Makefile recipes and puts a stray
+# "\r" at the end of values read from .env (for example inside DATABASE_URL).
+* text=auto eol=lf
