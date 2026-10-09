@@ -28,7 +28,7 @@ value), a few synthetic patients. `docker compose down -v` resets the database.
 
 ## Try it
 
-The token step uses [`jq`](https://jqlang.org/); without it, copy `access_token` from the login response by hand.
+The commands work in any bash (macOS, Linux, Git Bash on Windows) and need only `curl`.
 
 ```bash
 # 1. Create a staff member of Hospital A (the hospital code or its name both work)
@@ -39,7 +39,9 @@ curl -s -X POST http://localhost:8080/staff/create \
 # 2. Log in and keep the token
 TOKEN=$(curl -s -X POST http://localhost:8080/staff/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"nurse.a","password":"S3cure-Passw0rd","hospital":"hospital-a"}' | jq -r .access_token)
+  -d '{"username":"nurse.a","password":"S3cure-Passw0rd","hospital":"hospital-a"}' \
+  | sed -nE 's/.*"access_token":"([^"]+)".*/\1/p')
+[ -n "$TOKEN" ] && echo "logged in" || echo "login failed: check username, password and hospital"
 
 # 3. Search by name (Thai or English, partial, case-insensitive)
 curl -s -X POST http://localhost:8080/patient/search \
