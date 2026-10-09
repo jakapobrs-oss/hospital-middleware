@@ -174,6 +174,11 @@ func bindSearchRequest(c *gin.Context) (request searchPatientsRequest, ok bool) 
 		apierror.RespondValidation(c, err)
 		return request, false
 	}
+	// The query must be valid on its own: an invalid query value must not slip through because the
+	// body sets the same field and replaces it.
+	if !validateSearchRequest(c, request) {
+		return request, false
+	}
 	if !decodeJSONBody(c, &request) {
 		return request, false
 	}
@@ -182,6 +187,20 @@ func bindSearchRequest(c *gin.Context) (request searchPatientsRequest, ok bool) 
 		return request, false
 	}
 	return request, true
+}
+
+// validateSearchRequest runs the struct-tag rules and the checks in toCriteria, and writes the
+// error response itself when one fails.
+func validateSearchRequest(c *gin.Context, request searchPatientsRequest) bool {
+	if err := binding.Validator.ValidateStruct(&request); err != nil {
+		apierror.RespondValidation(c, err)
+		return false
+	}
+	if _, fieldErrors := request.toCriteria(); len(fieldErrors) > 0 {
+		apierror.RespondFields(c, fieldErrors...)
+		return false
+	}
+	return true
 }
 
 // decodeJSONBody strictly decodes an optional JSON body: unknown fields, wrong types, trailing

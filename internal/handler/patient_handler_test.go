@@ -264,6 +264,8 @@ func TestPatientHandler_Search_RejectsInputThatWouldBeIgnored(t *testing.T) {
 		{name: "NUL character", method: http.MethodPost, target: "/patient/search", body: `{"first_name":"\u0000"}`, expectedField: "first_name"},
 		{name: "phone number without digits", method: http.MethodPost, target: "/patient/search", body: `{"phone_number":"abc"}`, expectedField: "phone_number"},
 		{name: "national ID sent as a JSON number", method: http.MethodPost, target: "/patient/search", body: `{"national_id":1100000000016}`, expectedField: "national_id"},
+		{name: "invalid query value that the body would replace", method: http.MethodPost, target: "/patient/search?first_name=%FF", body: `{"first_name":"John"}`, expectedField: "first_name"},
+		{name: "query limit out of range that the body would replace", method: http.MethodPost, target: "/patient/search?limit=500", body: `{"limit":10}`, expectedField: "limit"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
