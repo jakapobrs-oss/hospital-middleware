@@ -1,0 +1,24 @@
+# Binaries and build output
+/bin/
+/dist/
+*.exe
+*.test
+
+# Coverage
+coverage.out
+coverage.html
+
+# Local environment (copy .env.example to .env)
+.env
+
+# Local working notes that are not part of the deliverable
+/.local/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Never commit the assignment brief
+*.pdf
