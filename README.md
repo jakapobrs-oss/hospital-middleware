@@ -74,6 +74,11 @@ Demo data (all synthetic):
 A staff member of `hospital-b` searching `{"first_name":"som"}` gets only `HN-B-000001`: the same person's
 Hospital A record is never visible to Hospital B.
 
+**Search scope:** the Hospital A API looks up one patient by national ID or passport ID only, so a search by name,
+date of birth, phone or email covers the patients the middleware has already received from the HIS (the demo seed,
+or an earlier search by identity number). For example, `{"first_name":"wichai"}` finds nothing on a fresh stack
+and finds Wichai once step 4 has fetched him. See [docs/design.md §1](docs/design.md#1-architecture).
+
 ## Tests
 
 ```bash
@@ -84,6 +89,9 @@ make cover-all          # coverage of unit + integration tests
 make test-e2e           # end-to-end tests through Nginx against the running stack (docker compose up first)
 make vuln               # known-vulnerability scan of the dependencies (govulncheck)
 ```
+
+Coverage at the submitted commit: **89.6%** of statements in `internal/` with the unit tests alone, **97.5%** with the
+integration tests.
 
 | Suite | What it proves |
 |---|---|
@@ -105,7 +113,7 @@ Set in `.env` (see `.env.example`); `docker-compose.yml` fixes `APP_PORT`, `GIN_
 | `JWT_SECRET` | — (required, ≥ 32 chars) | HMAC secret for access tokens; a warning is logged if it is the sample value |
 | `JWT_TTL` | `1h` | Access token lifetime |
 | `STAFF_REGISTRATION_KEY` | empty | When set, `/staff/create` requires the header `X-Registration-Key` with this value |
-| `HIS_BASE_URLS` | empty (`hospital-a=http://mock-his:8081` in compose) | `hospital-code=base-url` pairs, comma-separated |
+| `HIS_BASE_URLS` | empty (`hospital-a=http://mock-his:8081` in compose) | `hospital-code=base-url` pairs, comma-separated; the real Hospital A API would be `hospital-a=https://hospital-a.api.co.th` |
 | `HIS_TIMEOUT` | `3s` | Timeout of one HIS call |
 | `RUN_MIGRATIONS` | `true` | Apply migrations on start-up |
 | `SEED_DEMO_DATA` | `false` (`true` in `.env.example`) | Load the synthetic demo patients |

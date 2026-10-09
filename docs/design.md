@@ -192,8 +192,8 @@ Migrations live in `migrations/` (golang-migrate format) and run automatically o
 
 ### `POST /staff/create`
 
-Creates a staff account for a hospital. Public by default, as specified in the assignment; set
-`STAFF_REGISTRATION_KEY` to require the header `X-Registration-Key` (see §5).
+Creates a staff account for a hospital. The assignment does not say who may create staff accounts, so this design
+leaves the endpoint open by default; set `STAFF_REGISTRATION_KEY` to require the header `X-Registration-Key` (see §5).
 
 ```json
 { "username": "nurse.somchai", "password": "S3cure-Passw0rd", "hospital": "hospital-a" }
@@ -263,7 +263,7 @@ GET /patient/search?first_name=somchai&date_of_birth=1985-04-12
 
 | Field | Matching |
 |---|---|
-| `national_id` | exact; 13 digits, optionally separated by dashes or spaces (`1-1000-00000-01-6`); any other character is a `400` |
+| `national_id` | exact; 13 digits (the Thai national ID format), optionally separated by dashes or spaces (`1-1000-00000-01-6`); any other character is a `400` |
 | `passport_id` | exact, case-insensitive |
 | `first_name` | case-insensitive partial match on `first_name_th` **or** `first_name_en` |
 | `middle_name` | same, on the middle names |
@@ -283,7 +283,8 @@ records than intended, so these are rejected with `400 validation_error` instead
 - a second JSON object in the body, or a query string that is not correctly URL-encoded (`first_name=%ZZ`);
 - text that is not valid UTF-8 (`first_name=%FF`) or contains a NUL character.
 
-Each source must be valid on its own; when the query and the body set the same field, the body's value is used.
+The query and the body are each checked on their own, so an invalid query value is rejected even when the body sets
+the same field; when both are valid, the body's value is used.
 A JSON `null` means "not provided", the same as leaving the field out (responses use `null` the same way).
 
 `200 OK`
@@ -311,7 +312,8 @@ A JSON `null` means "not provided", the same as leaving the field out (responses
 }
 ```
 
-No match returns `200` with `"data": []`.
+No match returns `200` with `"data": []`. `gender` is `"M"` or `"F"`; a value outside that contract from the HIS is
+stored as unknown and returned as `null`, like any field the HIS left empty.
 
 Errors: `400 validation_error`, `401 unauthorized`, `413 payload_too_large`, `429 rate_limited`, `500 internal_error`.
 
@@ -333,13 +335,14 @@ Errors: `400 validation_error` (empty, over 20 characters, or not valid UTF-8 te
 
 `GET https://hospital-a.api.co.th/patient/search/{id}` — `id` is a national ID or passport ID. Returns one patient
 with the 13 fields above (`200`), or `404` when not found. The client tolerates `null` or empty optional values,
-dates as `YYYY-MM-DD` or RFC 3339, and Thai Buddhist Era years (2533 → 1990); an unreadable date is stored as unknown
-rather than dropping the record. A record that does not match the requested identity number is rejected.
+dates as `YYYY-MM-DD` or RFC 3339, and Thai Buddhist Era years (2533 → 1990); an unreadable date or a gender other than `M`/`F` is
+stored as unknown rather than dropping the record. A record that does not match the requested identity number is rejected.
 
 Onboarding another hospital that exposes the same API takes two steps: add its row to `hospitals` (a migration) and
 its base URL to `HIS_BASE_URLS` (`hospital-c=https://his.hospital-c.example`). A hospital with a different API needs
 one new adapter implementing `his.Client`. Because the real Hospital A domain is not reachable, `docker compose`
-runs `mock-his`, which implements this contract with synthetic patients.
+runs `mock-his`, which implements this contract with synthetic patients; pointing Hospital A at its real API is
+one setting: `HIS_BASE_URLS=hospital-a=https://hospital-a.api.co.th`.
 
 ---
 
@@ -352,10 +355,11 @@ runs `mock-his`, which implements this contract with synthetic patients.
   not reveal which usernames exist.
 - **Tokens:** HS256 with a secret of at least 32 characters from the environment; the algorithm, issuer and expiry
   are enforced on verify. The service logs a warning at start-up if the sample secret from `.env.example` is used.
-- **Staff registration:** `/staff/create` is public because the assignment specifies no authentication for it, which
-  means anyone could register as staff of any hospital and read its patients. Setting `STAFF_REGISTRATION_KEY`
+- **Staff registration:** `/staff/create` is open by default because the assignment does not say who may create staff
+  accounts, which means anyone could register as staff of any hospital and read its patients. Setting `STAFF_REGISTRATION_KEY`
   closes this: requests must then carry the matching `X-Registration-Key` header (compared in constant time). The
-  service warns at start-up while registration is open. A production system would use an admin role or invitations.
+  service warns at start-up while registration is open. The key is shared by all hospitals, so it limits who can
+  register, not which hospital they join; a production system would use an admin role or invitations.
 - **Rate limiting (Nginx):** `/staff/*` per client IP (30/min, burst 40) against password guessing; `/patient/*` per
   access token (120/min, burst 60) against enumerating identity numbers and flooding the HIS. The bucket key is the
   token itself, so `Bearer x`, `bearer x` and `Bearer   x` share one bucket.
@@ -390,6 +394,9 @@ runs `mock-his`, which implements this contract with synthetic patients.
   escaping, phone formats, per-hospital uniqueness and pagination.
 - End-to-end tests (`-tags e2e`) drive the running Docker Compose stack through Nginx.
 - `make test` runs the unit tests; `make cover` / `make cover-all` print total coverage (unit only / unit + integration).
+  At the submitted commit: **89.6%** of statements in `internal/` with the unit tests alone, **97.5%** with the
+  integration tests (most of the repository package is SQL, which only a real database can prove). `cmd/` only wires
+  the packages together and is exercised by the end-to-end tests.
 
 ---
 
