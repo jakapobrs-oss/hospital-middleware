@@ -1,0 +1,24 @@
+# Keep the build context small and keep secrets and the confidential assignment brief out of every image layer.
+.git
+.gitignore
+.local
+.env
+.env.*
+*.pdf
+
+# Build output and editor files
+bin
+dist
+coverage.out
+coverage.html
+*.exe
+*.test
+.idea
+.vscode
+
+# Not needed to build the binaries
+docs
+nginx
+README.md
+Makefile
+docker-compose.yml
