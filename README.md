@@ -17,11 +17,12 @@ docker compose up --build     # nginx + api + postgres + mock-his
 
 The API is served through Nginx at **http://localhost:8080**. On start-up the service applies the database
 migrations, seeds two hospitals (`hospital-a`, `hospital-b`) and, with `SEED_DEMO_DATA=true` (the `.env.example`
-value), a few synthetic patients. `docker compose down -v` resets the database.
+value), a few synthetic patients. `docker compose down -v` resets the database. If port 8080 is already in use,
+set `HTTP_PORT` in `.env` (for example `HTTP_PORT=9090`) and use that port in the commands below.
 
 | Service | Role | Exposed |
 |---|---|---|
-| `nginx` | Reverse proxy, rate limiting, PII-safe logging | `localhost:8080` |
+| `nginx` | Reverse proxy, rate limiting, PII-safe logging | `localhost:8080` (`HTTP_PORT`) |
 | `app` | Go API service | internal only |
 | `db` | PostgreSQL 17 | internal only |
 | `mock-his` | Stand-in for the Hospital A HIS (`hospital-a.api.co.th` is not reachable) | internal only |
@@ -90,6 +91,14 @@ make test-e2e           # end-to-end tests through Nginx against the running sta
 make vuln               # known-vulnerability scan of the dependencies (govulncheck)
 ```
 
+No Go or make on your machine? Run the unit tests inside the build image instead (only Docker is needed, and the
+two commands work in any shell, including Windows PowerShell):
+
+```bash
+docker build --target build -t hospital-middleware:test .
+docker run --rm hospital-middleware:test go test ./...
+```
+
 Coverage at the submitted commit: **89.6%** of statements in `internal/` with the unit tests alone, **97.5%** with the
 integration tests.
 
@@ -108,6 +117,7 @@ Set in `.env` (see `.env.example`); `docker-compose.yml` fixes `APP_PORT`, `GIN_
 
 | Variable | Default (service) | Description |
 |---|---|---|
+| `HTTP_PORT` | `8080` | Port on your machine where Nginx serves the API |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | `hospital` / — (required by compose) | Database credentials; keep the password URL-safe |
 | `DATABASE_URL` | — (required; built by compose) | PostgreSQL connection URL |
 | `JWT_SECRET` | — (required, ≥ 32 chars) | HMAC secret for access tokens; a warning is logged if it is the sample value |

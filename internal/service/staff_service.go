@@ -85,8 +85,8 @@ type StaffService struct {
 }
 
 // NewStaffService wires the staff use cases to their collaborators.
-// An empty registrationKey leaves staff registration open, as the assignment describes. A non-empty one protects
-// it: Create then only accepts requests that carry the same key.
+// An empty registrationKey leaves staff registration open, because the assignment does not say who may create
+// staff accounts. A non-empty one protects it: Create then only accepts requests that carry the same key.
 func NewStaffService(hospitals HospitalRepository, staff StaffRepository, hasher PasswordHasher, tokens TokenIssuer, registrationKey string) *StaffService {
 	return &StaffService{hospitals: hospitals, staff: staff, hasher: hasher, tokens: tokens, registrationKey: registrationKey}
 }

@@ -1,7 +1,7 @@
 # Local stack: nginx (the only published port) -> api -> postgres, plus a mock Hospital A HIS.
 #
 #   cp .env.example .env
-#   docker compose up --build        # API through nginx: http://localhost:8080
+#   docker compose up --build        # API through nginx: http://localhost:8080 (HTTP_PORT in .env changes the port)
 #
 # Settings that are not secrets are fixed here; the ones you may change come from .env (see .env.example).
 name: hospital-middleware
@@ -74,7 +74,7 @@ services:
       app:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
